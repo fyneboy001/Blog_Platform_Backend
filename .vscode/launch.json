@@ -5,9 +5,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Blog Platform",
-      "processId": "${command:PickProcess}",
-      "request": "attach",
+      "name": "Launch via Bun",
+      "request": "launch",
+      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "npm",
       "skipFiles": ["<node_internals>/**"],
       "type": "node"
     },

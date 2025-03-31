@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
-//const validator = require("express-validator");
+const bcrypt = require("bcryptjs");
+//const validator = require("validator");
 
 //creating a schema for user registration
 const userSchema = new mongoose.Schema(
@@ -17,32 +18,39 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: [true, "Please provide your email"],
       lowercase: true, //converts email to lowercase
-      validate: [validator.isEmail, "Please provide a valid email address"], //validates if email is in the correct format
     },
     profilePhoto: {
       type: String,
     },
     password: {
       type: String,
-      required: [true, "Enter a password"],
+      required: true,
       minlength: 8, //Ensures password contains atleast 8 characters
     },
     confirmPassword: {
       type: String,
-      required: [true, "Confirm your password"],
-      //This validate ensures that the password and passwordConfirm are the same
-      validate: {
-        validator: function (el) {
-          return el === this.get("password");
-        },
-        message: "Passwords are not the same",
-      },
+      required: true,
     },
   },
   {
     timestamps: true,
   }
 );
+
+// Pre-save middleware to check if passwords match
+userSchema.pre("save", function (next) {
+  if (this.password !== this.confirmPassword) {
+    throw new Error("Passwords do not match"); // This throws the error you're seeing
+  }
+
+  // If passwords match, hash the password
+  bcrypt.hash(this.password, 10, (err, hashedPassword) => {
+    if (err) return next(err);
+    this.password = hashedPassword; // Save the hashed password
+    this.confirmPassword = undefined; // No need to save confirmPassword in DB
+    next();
+  });
+});
 
 const userModel = mongoose.model("User", userSchema);
 

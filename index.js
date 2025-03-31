@@ -2,14 +2,18 @@ const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
 const userRoute = require("./Route/userRoute");
+const postRoute = require("./Route/postRoute");
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
 app.use(express.json());
 app.use(userRoute);
+app.use(postRoute);
+require("dotenv").config();
 
 //connecting express to database
+const { MONGODB_URL } = process.env;
 mongoose
-  .connect(
-    "mongodb+srv://fyneboyfynerose:divinefavour@blog-platform-backend.tszlm.mongodb.net/Rosemary"
-  )
+  .connect(MONGODB_URL)
   .then(() => {
     console.log("Database connected successfully");
   })
