@@ -31,6 +31,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    isAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    kyc: {
+      type: mongoose.Types.ObjectId,
+      ref: "kyc",
+    },
+    post: [{ type: mongoose.Types.ObjectId, ref: "Post" }],
   },
   {
     timestamps: true,
