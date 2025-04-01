@@ -30,6 +30,7 @@ const userSchema = new mongoose.Schema(
     confirmPassword: {
       type: String,
       required: true,
+      select: false, // This prevents it from being retrieved in queries
     },
     isAdmin: {
       type: Boolean,

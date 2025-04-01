@@ -1,22 +1,25 @@
 const jwt = require("jsonwebtoken");
 
 const authorization = (req, res, next) => {
-  const { token } = req.cookies;
-  if (!token) {
-    res
-      .status(401)
-      .json({ message: "You are not authorized to access this route" });
-  }
-  //verify if token is valid
-  jwt.verify(token, process.env.JWT_SECRET, (err, payload) => {
-    if (err) {
+  try {
+    const { token } = req.cookies;
+
+    if (!token) {
       return res
         .status(401)
-        .json("You are not authorized to access this route");
+        .json({ message: "You are not authorized to access this route" });
     }
-    req.user = payload.id;
+
+    // Verify token
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Attach the full user payload to the request
+    req.user = payload;
+
     next();
-  });
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
 };
 
 module.exports = authorization;

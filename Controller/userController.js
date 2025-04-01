@@ -1,114 +1,163 @@
-const userModel = require("../Model/userModel");
-const jwt = require("jsonwebtoken");
-//const bcrypt = require("bcryptjs");
+const userModel = require("../Model/userModel"); // Import user model (MongoDB schema)
+const jwt = require("jsonwebtoken"); // Import JSON Web Token for authentication
+const bcrypt = require("bcryptjs"); // Import bcrypt for password hashing
 
-//Writing a function that creates a new user
+/**
+ * Helper function to send consistent error responses
+ * @param {Object} res - Express response object
+ * @param {string} message - Error message
+ * @param {number} status - HTTP status code (default: 400)
+ */
+const handleError = (res, message, status = 400) =>
+  res.status(status).json({ error: message });
+
+/**
+ * Signup function - Registers a new user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
 const signupUser = async (req, res) => {
-  //requesting the users information from the frontend
-  const { firstName, lastName, email, password, confirmPassword } = req.body;
-  console.log(req.body);
-  // console.log("Headers:", req.headers); // Log headers to check if content-type is correct
-  // console.log("Request Body:", req.body);
-
-  if (!password || !confirmPassword || !firstName || !lastName || !email) {
-    return res.status(400).json("All fields are required");
-  }
-
-  //Checking password length
-  if (password.length < 8) {
-    return res.status(403).json("Provide a stronger password");
-  }
-
-  if (password !== confirmPassword) {
-    return res.status(400).json("Passwords do not match");
-  }
-  //salting the password for hashing
-  //const salt = bcrypt.genSaltSync(10);
-
-  //Hashing the password passed from the frontend
-  //const hashPassword = await bcrypt.hash(password, salt);
-  //const hashPasswordConfirm = await bcrypt.hash(confirmPassword, salt);
-  //console.log(hashPassword);
-  //console.log(hashPasswordConfirm);
-
-  //Checking if the email address sent from the frontend already exist
-  const checkUserEmail = await userModel.findOne({ email });
-  if (checkUserEmail) {
-    return res.status(409).json("User already exist");
-  }
-
-  //using try, save the user information if everything is correct and catch error by sending a message back if something goes wrong
   try {
+    // Destructuring request body to get user input
+    const { firstName, lastName, email, password, confirmPassword } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+      return handleError(res, "All fields are required");
+    }
+
+    // Check password length
+    if (password.length < 8) {
+      return handleError(
+        res,
+        "Password must be at least 8 characters long",
+        403
+      );
+    }
+
+    // Ensure password and confirmPassword match
+    if (password !== confirmPassword) {
+      return handleError(res, "Passwords do not match");
+    }
+
+    // Check if user with the same email already exists
+    const existingUser = await userModel.findOne({ email });
+    if (existingUser) {
+      return handleError(res, "User already exists", 409);
+    }
+
+    // Hash password before saving it in the database
+    const salt = await bcrypt.genSalt(10); // Generate salt for hashing
+    // const hashedPassword = await bcrypt.hash(password, salt); // Hash password
+
+    // Create new user instance with hashed password
     const newUser = new userModel({
-      password,
-      confirmPassword,
       firstName,
       lastName,
       email,
+      password,
+      confirmPassword,
     });
-    await newUser.save();
-    return res.status(201).json("User account created successfully");
+
+    await newUser.save(); // Save user to the database
+
+    return res
+      .status(201)
+      .json({ message: "User account created successfully" });
   } catch (error) {
-    console.log(error);
-    return res.status(400).json("Unable to create account");
+    console.error(error);
+    return handleError(res, "Unable to create account", 500);
   }
 };
 
-//Generating a function to login a user
+/**
+ * Login function - Authenticates user and generates JWT token
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  //Checking if email or password was sent from the frontend
-  if (!email || !password) {
-    return res.status(400).json("Please provide valid credentials");
+    // Ensure email and password are provided
+    if (!email || !password) {
+      return handleError(res, "Please provide valid credentials");
+    }
+
+    // Find user by email
+    const user = await userModel.findOne({ email });
+    if (!user) {
+      return handleError(res, "User not found: Please create an account", 404);
+    }
+
+    // Compare input password with stored hashed password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return handleError(res, "Invalid Password", 400);
+    }
+
+    // Generate JWT token with user ID as payload
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    // Set token in HTTP-only cookie for security
+    res
+      .cookie("token", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Strict",
+      })
+      .status(200)
+      .json({ message: "Login successful", user });
+  } catch (error) {
+    console.error(error);
+    return handleError(res, "Something went wrong", 500);
   }
-
-  //checking is new user has an existing account
-  const validateUser = await userModel.findOne({ email });
-  if (!validateUser) {
-    return res.status(404).json("User not found: Please create an account");
-  }
-
-  //Checking if user password matches saved password
-  const validatePassword = await userModel.findOne({
-    password: validateUser.password,
-  });
-  if (!validatePassword) {
-    return res.status(400).json("Invalid Password");
-  }
-
-  //Generating jsonwebtoken
-  const token = jwt.sign({ id: validateUser.id }, process.env.JWT_SECRET);
-
-  //returning the user webpage when all validations are met
-  res.cookie("token", token, { httpOnly: true }).status(200).json(validateUser);
 };
 
-//function to get a single user
+/**
+ * Get a single user by ID
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
 const getOneUser = async (req, res) => {
-  const { id } = req.params;
-
   try {
-    const oneUser = await userModel.findById(id);
-    return res.status(200).json(oneUser);
+    const { id } = req.params; // Extract user ID from request parameters
+    const user = await userModel.findById(id); // Fetch user from database
+
+    if (!user) return handleError(res, "User not found", 404); // Check if user exists
+
+    return res.status(200).json(user); // Return user details
   } catch (error) {
-    res.status(500).json("Something went Wrong");
+    console.error(error);
+    return handleError(res, "Something went wrong", 500);
   }
 };
 
-//Function to delete User
+/**
+ * Delete user account
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
 const deleteUser = async (req, res) => {
-  const { token } = req.cookies;
-  console.log(req.cookies);
-  const { id } = jwt.verify(token, process.env.JWT_SECRET);
-
   try {
-    const user = await userModel.findByIdAndDelete({ creatorId: id });
-    return res.status(200).json("User Account Deleted Successfully");
+    const { token } = req.cookies; // Extract token from cookies
+    if (!token) return handleError(res, "Unauthorized", 401); // Ensure token is present
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify JWT token
+    if (!decoded.id) return handleError(res, "Invalid token", 401); // Ensure valid user ID
+
+    await userModel.findByIdAndDelete(decoded.id); // Delete user from database
+
+    return res
+      .status(200)
+      .json({ message: "User account deleted successfully" });
   } catch (error) {
-    return res.status(500).json("Something went wrong");
+    console.error(error);
+    return handleError(res, "Something went wrong", 500);
   }
 };
 
-//Exporting functions for use in the route
+// Exporting functions to be used in routes
 module.exports = { signupUser, loginUser, getOneUser, deleteUser };

@@ -10,10 +10,7 @@ const kycSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    Nationality: {
-      type: String,
-      required: true,
-    },
+    nationality: { type: String, required: true }, // Renamed field (Made it lowercase)
     completed: {
       type: Boolean,
       required: true,
